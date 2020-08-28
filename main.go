@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -89,6 +90,12 @@ func Push(configs HarborConfigs) {
 	}
 }
 
+func TarFolder(configs HarborConfigs) {
+	cmd := exec.Command("/bin/sh", "-c", "$(which tar) -zcvf "+configs.HarborChart+".gz "+configs.HarborChart)
+	err := cmd.Run()
+	fmt.Println("Error: ", err)
+}
+
 func main() {
 	var defaultPath = "~/.harbor_config.json"
 	args := os.Args[1:]
@@ -119,5 +126,7 @@ func main() {
 	configs.HarborLogin = strings.TrimSpace(configs.HarborLogin)
 	configs.HarborPassword = strings.TrimSpace(configs.HarborPassword)
 	configs.HarborBaseUrl = strings.TrimSpace(configs.HarborBaseUrl)
+	TarFolder(configs)
 	Push(configs)
+	os.Remove(configs.HarborChart + ".gz")
 }
