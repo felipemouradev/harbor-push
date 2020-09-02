@@ -91,18 +91,15 @@ func Push(configs HarborConfigs) {
 }
 
 func TarFolder(configs HarborConfigs) {
-	cmd := exec.Command("/bin/sh", "-c", "$(which tar) -zcvf "+configs.HarborChart+".gz "+configs.HarborChart)
+	cmd := exec.Command("/bin/sh", "-c", "tar -zcvf "+configs.HarborChart+".gz "+configs.HarborChart)
 	err := cmd.Run()
-	fmt.Println("Error: ", err)
+	fmt.Println("Error GZ: ", err)
 }
 
 func main() {
-	var defaultPath = "~/.harbor_config.json"
+	var defaultPath = os.Getenv("HOME") + "/.harbor_config.json"
 	args := os.Args[1:]
-	var configs = HarborConfigs{
-		HarborRepo:  args[1],
-		HarborChart: args[0],
-	}
+	var configs HarborConfigs
 
 	if _, err := os.Stat(defaultPath); os.IsNotExist(err) {
 		var harborConfigsData HarborConfigs
@@ -123,6 +120,8 @@ func main() {
 		file, _ := ioutil.ReadFile(defaultPath)
 		_ = json.Unmarshal([]byte(file), &configs)
 	}
+	configs.HarborChart = strings.TrimSpace(args[0])
+	configs.HarborRepo = strings.TrimSpace(args[1])
 	configs.HarborLogin = strings.TrimSpace(configs.HarborLogin)
 	configs.HarborPassword = strings.TrimSpace(configs.HarborPassword)
 	configs.HarborBaseUrl = strings.TrimSpace(configs.HarborBaseUrl)
