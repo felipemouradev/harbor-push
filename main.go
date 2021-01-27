@@ -9,9 +9,12 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type HarborConfigs struct {
@@ -20,6 +23,17 @@ type HarborConfigs struct {
 	HarborPassword string `json:"harborPassword"`
 	HarborRepo     string `json:"harborRepo"`
 	HarborChart    string `json:"harborChart"`
+}
+
+func validThenGetURL(reader *bufio.Reader) (rawurl string) {
+	fmt.Print("Enter service URL: ")
+	rawurl, _ = reader.ReadString('\n')
+	rawurl = strings.TrimSpace(rawurl)
+	if _, err := url.ParseRequestURI(rawurl); err != nil {
+		fmt.Println("Invalid URL!")
+		rawurl = validThenGetURL(reader)
+	}
+	return
 }
 
 func NewfileUploadRequest(uri string, params map[string]string, paramName, path string) (*http.Request, error) {
@@ -57,7 +71,7 @@ func NewfileUploadRequest(uri string, params map[string]string, paramName, path 
 	return request, err
 }
 
-func Push(configs HarborConfigs) {
+func Push(configs *HarborConfigs) {
 	path, _ := os.Getwd()
 	path += "/" + configs.HarborChart + ".gz"
 	urlBase := configs.HarborBaseUrl + "/api/chartrepo/" + configs.HarborRepo + "/charts"
@@ -90,42 +104,45 @@ func Push(configs HarborConfigs) {
 	}
 }
 
-func TarFolder(configs HarborConfigs) {
+func TarFolder(configs *HarborConfigs) {
 	cmd := exec.Command("/bin/sh", "-c", "tar -zcvf "+configs.HarborChart+".gz "+configs.HarborChart)
 	err := cmd.Run()
 	fmt.Println("Error GZ: ", err)
 }
 
 func main() {
-	var defaultPath = os.Getenv("HOME") + "/.harbor_config.json"
 	args := os.Args[1:]
-	var configs HarborConfigs
+
+	if len(args) < 2 {
+		fmt.Printf("No valid args found. Usage: %q\r\n", "harborpush CHART_NAME REPO_NAME")
+		os.Exit(0)
+	}
+
+	defaultPath := os.Getenv("HOME") + "/.harbor_config.json"
+	configs := HarborConfigs{}
 
 	if _, err := os.Stat(defaultPath); os.IsNotExist(err) {
-		var harborConfigsData HarborConfigs
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("Enter your harbor url: ")
-		harborBaseUrl, _ := reader.ReadString('\n')
-		harborConfigsData.HarborBaseUrl = harborBaseUrl
+		configs.HarborBaseUrl = strings.TrimSpace(validThenGetURL(reader))
 		fmt.Print("Enter your harbor login: ")
 		harborLogin, _ := reader.ReadString('\n')
-		harborConfigsData.HarborLogin = harborLogin
+		configs.HarborLogin = strings.TrimSpace(harborLogin)
 		fmt.Print("Enter your harbor password: ")
-		harborPassword, _ := reader.ReadString('\n')
-		harborConfigsData.HarborPassword = harborPassword
-		file, _ := json.MarshalIndent(harborConfigsData, "", " ")
-		err = ioutil.WriteFile(defaultPath, file, 0644)
-		fmt.Println("err: ", err)
+		harborPassword, _ := terminal.ReadPassword(0)
+		configs.HarborPassword = strings.TrimSpace(string(harborPassword))
+		file, _ := json.MarshalIndent(configs, "", " ")
+		if err = ioutil.WriteFile(defaultPath, file, 0644); err != nil {
+			fmt.Println("Error trying to write config file. Err: ", err.Error())
+		}
 	} else {
 		file, _ := ioutil.ReadFile(defaultPath)
 		_ = json.Unmarshal([]byte(file), &configs)
 	}
+
 	configs.HarborChart = strings.TrimSpace(args[0])
 	configs.HarborRepo = strings.TrimSpace(args[1])
-	configs.HarborLogin = strings.TrimSpace(configs.HarborLogin)
-	configs.HarborPassword = strings.TrimSpace(configs.HarborPassword)
-	configs.HarborBaseUrl = strings.TrimSpace(configs.HarborBaseUrl)
-	TarFolder(configs)
-	Push(configs)
+
+	TarFolder(&configs)
+	Push(&configs)
 	os.Remove(configs.HarborChart + ".gz")
 }
